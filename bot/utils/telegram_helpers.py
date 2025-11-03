@@ -66,3 +66,4 @@ async def safe_edit_message_text(query, text: str, reply_markup=None, parse_mode
         return False
 
 
+

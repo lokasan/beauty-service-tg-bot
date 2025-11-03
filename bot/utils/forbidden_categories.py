@@ -109,3 +109,4 @@ def add_forbidden_category(category: str, country_code: str = "ALL"):
         logger.info(f"Добавлена запрещенная категория '{category}' для страны '{country_code}'")
 
 
+

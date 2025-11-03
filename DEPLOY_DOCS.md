@@ -131,3 +131,4 @@ docs/
   _build/html/        # Сгенерированные HTML файлы (в .gitignore)
 ```
 
+
