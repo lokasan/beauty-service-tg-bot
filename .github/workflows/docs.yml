@@ -1,0 +1,63 @@
+name: Build and Deploy Documentation
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'docs/**'
+      - 'bot/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: Install Sphinx and dependencies
+      run: |
+        pip install --upgrade pip
+        pip install sphinx sphinx-rtd-theme sphinx-autodoc-typehints
+        
+    - name: Build documentation
+      working-directory: docs
+      run: |
+        python -m sphinx -b html . _build/html
+        
+    - name: Setup Pages
+      uses: actions/configure-pages@v3
+      
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: './docs/_build/html'
+        
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v2
+

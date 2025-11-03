@@ -1,0 +1,38 @@
+/* Custom CSS for documentation */
+
+/* Improve code blocks */
+.highlight {
+    margin: 1em 0;
+    padding: 0.5em;
+    border-radius: 4px;
+}
+
+/* Better table formatting */
+table.docutils {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+}
+
+table.docutils th,
+table.docutils td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+table.docutils th {
+    background-color: #4CAF50;
+    color: white;
+}
+
+/* Improve navigation */
+.wy-side-nav-search {
+    background-color: #2980b9;
+}
+
+/* Better code syntax highlighting */
+.code-block {
+    font-family: 'Courier New', monospace;
+}
+
