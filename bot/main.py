@@ -154,6 +154,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         await common.feedback_callback(update, context)
     elif query.data == "client_appointments":
         await client.client_appointments_callback(update, context)
+    elif query.data.startswith("cancel_appointment_"):
+        await client.cancel_appointment_callback(update, context)
     elif query.data.startswith("master_link_from_appointment_"):
         await client.show_master_profile_from_appointment(update, context)
     elif query.data == "settings_notifications":

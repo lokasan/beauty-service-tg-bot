@@ -582,15 +582,28 @@ async def client_appointments_callback(update: Update, context: ContextTypes.DEF
         status_emoji = {
             AppointmentStatus.PENDING: "⏳",
             AppointmentStatus.CONFIRMED: "✅",
-            AppointmentStatus.CANCELLED: "❌"
+            AppointmentStatus.CANCELLED: "❌",
+            AppointmentStatus.COMPLETED: "✔️"
         }.get(appointment.status, "📅")
         
         message += (
             f"{status_emoji} {appointment.start_time.strftime('%d.%m.%Y %H:%M')}\n"
             f"   🛠 {service.name}\n"
             f"   👤 Мастер: {master_profile.business_name or master_profile.user.full_name}\n"
-            f"   💰 {service.price} ₽\n\n"
+            f"   💰 {service.price} ₽\n"
         )
+        
+        # Добавляем кнопку отмены для подтвержденных и ожидающих записей
+        if appointment.status in [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED]:
+            # Проверяем, можно ли отменить (не менее 2 часов до начала)
+            time_until = appointment.start_time - datetime.utcnow()
+            if time_until >= timedelta(hours=2):
+                buttons.append([InlineKeyboardButton(
+                    f"❌ Отменить: {appointment.start_time.strftime('%d.%m %H:%M')}",
+                    callback_data=f"cancel_appointment_{appointment.id}"
+                )])
+        
+        message += "\n"
     
     # Создаем кнопки для каждого уникального мастера
     for master_id, master_profile in masters_dict.items():
@@ -624,6 +637,88 @@ async def show_master_profile_from_appointment(update: Update, context: ContextT
     # Этот обработчик можно использовать для дополнительной функциональности
     # Пока просто перенаправляем на услуги мастера
     pass
+
+
+async def cancel_appointment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена записи клиентом"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Извлекаем appointment_id из callback_data: cancel_appointment_{id}
+    appointment_id = int(query.data.split('_')[-1])
+    
+    db = get_db_from_context(context)
+    user_data = update.effective_user
+    
+    user = db.query(User).filter(User.telegram_id == user_data.id).first()
+    if not user:
+        await safe_edit_message_text(query, "❌ Пользователь не найден")
+        return
+    
+    appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    
+    if not appointment:
+        await safe_edit_message_text(query, "❌ Запись не найдена")
+        return
+    
+    if appointment.client_id != user.id:
+        await safe_edit_message_text(query, "❌ Это не ваша запись")
+        return
+    
+    if appointment.status == AppointmentStatus.CANCELLED:
+        await safe_edit_message_text(query, "❌ Запись уже отменена")
+        return
+    
+    if appointment.status == AppointmentStatus.COMPLETED:
+        await safe_edit_message_text(query, "❌ Нельзя отменить завершенную запись")
+        return
+    
+    # Проверка: можно отменить только за определенное время до начала
+    time_until = appointment.start_time - datetime.utcnow()
+    
+    if time_until < timedelta(hours=2):
+        await query.answer(
+            "❌ Запись можно отменить не менее чем за 2 часа до начала",
+            show_alert=True
+        )
+        return
+    
+    # Отмена записи
+    appointment.status = AppointmentStatus.CANCELLED
+    db.commit()
+    
+    # Уведомление мастеру
+    try:
+        master_user = appointment.master_profile.user
+        service = appointment.service
+        await context.bot.send_message(
+            chat_id=master_user.telegram_id,
+            text=(
+                f"⚠️ Запись отменена клиентом\n\n"
+                f"Услуга: {service.name}\n"
+                f"Дата: {appointment.start_time.strftime('%d.%m.%Y %H:%M')}\n"
+                f"Клиент: {appointment.client_name or appointment.client.full_name}\n"
+                f"Телефон: {appointment.client_phone or 'Не указан'}\n\n"
+                f"Слот освобожден и доступен для записи."
+            )
+        )
+    except Exception as e:
+        logger.error(f"Ошибка отправки уведомления мастеру: {e}")
+    
+    # Показываем подтверждение отмены
+    keyboard = [
+        [InlineKeyboardButton("📅 Мои записи", callback_data="client_appointments")],
+        [InlineKeyboardButton("◀️ Главное меню", callback_data="start_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await safe_edit_message_text(
+        query,
+        "✅ Запись успешно отменена.\n\nСлот освобожден и доступен для записи.",
+        reply_markup=reply_markup
+    )
+    
+    logger.info(f"Запись {appointment_id} отменена клиентом {user.id}")
 
 
 async def month_navigation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
