@@ -2,7 +2,7 @@
 Обработчики для мастеров
 """
 from sqlalchemy.orm import Session
-from bot.models import User, UserRole, MasterProfile, Service, Appointment, AppointmentStatus
+from bot.models import User, UserRole, MasterProfile, Service, Appointment, AppointmentStatus, Feedback
 from bot.utils.forbidden_categories import validate_service_name
 from bot.utils.validators import validate_price, validate_duration, generate_unique_link
 from bot.utils.telegram_helpers import safe_edit_message_text
@@ -941,6 +941,7 @@ async def master_settings_callback(update: Update, context: ContextTypes.DEFAULT
             callback_data="settings_notifications"
         )],
         [InlineKeyboardButton("📅 Расписание работы", callback_data="schedule_settings")],
+        [InlineKeyboardButton("⭐ Мои отзывы", callback_data="master_reviews")],
         [InlineKeyboardButton("◀️ Назад", callback_data="start_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1973,5 +1974,114 @@ async def complete_appointment_callback(update: Update, context: ContextTypes.DE
             [InlineKeyboardButton("◀️ Мои записи", callback_data="master_appointments")]
         ])
     )
+
+
+async def master_reviews_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Просмотр отзывов мастера с пагинацией"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Извлекаем номер страницы из callback_data: master_reviews_page_{page} или просто master_reviews
+    page = 1
+    if query.data.startswith("master_reviews_page_"):
+        page = int(query.data.split('_')[-1])
+    
+    db = get_db_from_context(context)
+    user_data = update.effective_user
+    
+    user = db.query(User).filter(User.telegram_id == user_data.id).first()
+    if not user or not user.master_profile:
+        await safe_edit_message_text(query, "❌ Вы не являетесь мастером")
+        return
+    
+    master = user.master_profile
+    
+    # Получаем все отзывы через записи
+    from sqlalchemy import func
+    
+    # Общее количество отзывов
+    total_reviews = db.query(func.count(Feedback.id)).select_from(Feedback).join(
+        Appointment, Feedback.appointment_id == Appointment.id
+    ).filter(
+        Appointment.master_id == master.id,
+        Feedback.rating.isnot(None)
+    ).scalar()
+    
+    if total_reviews == 0:
+        await safe_edit_message_text(
+            query,
+            "📝 У вас пока нет отзывов\n\n"
+            "Отзывы появляются после того, как клиенты оставят оценку завершенной услуге."
+        )
+        return
+    
+    # Средний рейтинг
+    avg_rating = db.query(func.avg(Feedback.rating)).select_from(Feedback).join(
+        Appointment, Feedback.appointment_id == Appointment.id
+    ).filter(
+        Appointment.master_id == master.id,
+        Feedback.rating.isnot(None)
+    ).scalar()
+    
+    # Пагинация: 5 записей на страницу
+    per_page = 5
+    total_pages = (total_reviews + per_page - 1) // per_page
+    page = min(max(page, 1), total_pages)  # Ограничиваем страницу
+    
+    offset = (page - 1) * per_page
+    
+    # Получаем отзывы для текущей страницы
+    reviews = db.query(
+        Feedback.rating,
+        Feedback.message,
+        Feedback.created_at,
+        Appointment.service_id,
+        Service.name.label('service_name'),
+        User.full_name.label('client_name')
+    ).select_from(Feedback).join(
+        Appointment, Feedback.appointment_id == Appointment.id
+    ).join(
+        Service, Appointment.service_id == Service.id
+    ).join(
+        User, Feedback.user_id == User.id
+    ).filter(
+        Appointment.master_id == master.id,
+        Feedback.rating.isnot(None)
+    ).order_by(Feedback.created_at.desc()).offset(offset).limit(per_page).all()
+    
+    message = (
+        f"⭐ Ваши отзывы\n\n"
+        f"📊 Средний рейтинг: {avg_rating:.1f}/5 ({'⭐' * round(avg_rating)})\n"
+        f"📝 Всего отзывов: {total_reviews}\n"
+        f"📄 Страница {page} из {total_pages}\n\n"
+    )
+    
+    for rating, message_text, created_at, service_id, service_name, client_name in reviews:
+        stars = "⭐" * rating
+        message += (
+            f"{stars} {rating}/5\n"
+            f"Услуга: {service_name}\n"
+        )
+        if message_text:
+            message += f"Отзыв: {message_text[:100]}{'...' if len(message_text) > 100 else ''}\n"
+        message += f"Клиент: {client_name or 'Не указан'}\n"
+        message += f"Дата: {created_at.strftime('%d.%m.%Y')}\n\n"
+    
+    # Кнопки пагинации
+    keyboard = []
+    nav_buttons = []
+    
+    if page > 1:
+        nav_buttons.append(InlineKeyboardButton("◀️ Предыдущая", callback_data=f"master_reviews_page_{page - 1}"))
+    if page < total_pages:
+        nav_buttons.append(InlineKeyboardButton("Следующая ▶️", callback_data=f"master_reviews_page_{page + 1}"))
+    
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
+    keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="master_settings")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await safe_edit_message_text(query, message, reply_markup=reply_markup)
 
 

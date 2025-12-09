@@ -118,6 +118,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("📋 Мои услуги", callback_data="master_services")],
             [InlineKeyboardButton("📅 Мои записи", callback_data="master_appointments")],
+            [InlineKeyboardButton("📝 Записи как клиент", callback_data="client_appointments")],
             [InlineKeyboardButton("⚙️ Настройки", callback_data="master_settings")],
             [InlineKeyboardButton("🔗 Моя ссылка", callback_data="master_link")],
             [InlineKeyboardButton("📝 Записаться к мастеру", callback_data="book_by_link")]

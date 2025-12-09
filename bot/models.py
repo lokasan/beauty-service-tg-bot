@@ -178,7 +178,13 @@ class Feedback(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
-    message = Column(Text, nullable=False)
+    master_id = Column(Integer, ForeignKey("master_profiles.id"), nullable=True)  # Для быстрого доступа к мастеру
+    message = Column(Text, nullable=True)  # Отзыв может быть без текста, только с оценкой
     rating = Column(Integer, nullable=True)  # 1-5
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    appointment = relationship("Appointment", foreign_keys=[appointment_id])
+    master_profile = relationship("MasterProfile", foreign_keys=[master_id])
 

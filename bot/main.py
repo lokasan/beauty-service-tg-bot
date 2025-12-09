@@ -152,10 +152,20 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         await client.month_navigation_callback(update, context)
     elif query.data == "feedback":
         await common.feedback_callback(update, context)
-    elif query.data == "client_appointments":
+    elif query.data == "client_appointments" or query.data.startswith("client_appointments_page_"):
         await client.client_appointments_callback(update, context)
     elif query.data.startswith("cancel_appointment_"):
         await client.cancel_appointment_callback(update, context)
+    elif query.data.startswith("leave_feedback_"):
+        await client.leave_feedback_callback(update, context)
+    elif query.data.startswith("rating_"):
+        await client.rating_callback(update, context)
+    elif query.data.startswith("skip_feedback_text_"):
+        await client.skip_feedback_text_callback(update, context)
+    elif query.data.startswith("view_reviews_"):
+        await client.view_master_reviews_callback(update, context)
+    elif query.data == "master_reviews" or query.data.startswith("master_reviews_page_"):
+        await master.master_reviews_callback(update, context)
     elif query.data.startswith("master_link_from_appointment_"):
         await client.show_master_profile_from_appointment(update, context)
     elif query.data == "settings_notifications":
@@ -180,6 +190,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверка на получение контакта (телефона)
     if update.message.contact and context.user_data.get('phone_requested'):
         await client.handle_phone_contact(update, context)
+        return
+    
+    # Проверка на оставление отзыва
+    if context.user_data.get('leaving_feedback'):
+        await client.handle_feedback_text(update, context)
         return
     
     # Проверка на настройку расписания
